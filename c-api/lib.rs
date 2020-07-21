@@ -573,11 +573,11 @@ pub extern "C" fn ttfp_get_glyph_y_origin(face: *const ttfp_face, glyph_id: Glyp
 
 /// @brief Returns glyph's name.
 ///
-/// Uses the `post` table as a source.
+/// Uses the `post` and `CFF` tables as sources.
 ///
 /// A glyph name cannot be larger than 255 bytes + 1 byte for '\0'.
 ///
-/// @param name A char buffer longer than 256 bytes.
+/// @param name A char buffer larger than 256 bytes.
 /// @return `true` on success.
 #[no_mangle]
 pub extern "C" fn ttfp_get_glyph_name(
@@ -828,6 +828,20 @@ pub extern "C" fn ttfp_get_variation_axis_by_tag(
 #[no_mangle]
 pub extern "C" fn ttfp_set_variation(face: *mut ttfp_face, axis: Tag, value: f32) -> bool {
     face_from_mut_ptr(face).set_variation(axis, value).is_some()
+}
+
+/// @brief Returns the current normalized variation coordinates.
+///
+/// Values represented as f2.16
+#[no_mangle]
+pub extern "C" fn ttfp_get_variation_coordinates(face: *const ttfp_face) -> *const i16 {
+    face_from_ptr(face).variation_coordinates().as_ptr() as _
+}
+
+/// @brief Checks that face has non-default variation coordinates.
+#[no_mangle]
+pub extern "C" fn ttfp_has_non_default_variation_coordinates(face: *const ttfp_face) -> bool {
+    face_from_ptr(face).has_non_default_variation_coordinates()
 }
 
 #[cfg(test)]

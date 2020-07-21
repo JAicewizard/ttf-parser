@@ -1,6 +1,6 @@
 // https://docs.microsoft.com/en-us/typography/opentype/spec/gdef
 
-use crate::{GlyphId, NormalizedCoord};
+use crate::{GlyphId, NormalizedCoordinate};
 use crate::parser::{Stream, Offset, Offset16, Offset32, LazyArray16};
 use crate::ggg::{Class, ClassDefinitionTable, CoverageTable};
 use crate::var_store::ItemVariationStore;
@@ -71,7 +71,7 @@ impl<'a> Table<'a> {
                 let format: u16 = s.read()?;
                 if format == 1 {
                     if let Some(count) = s.read::<u16>() {
-                        if let Some(array) = s.read_array16(count) {
+                        if let Some(array) = s.read_array16::<Offset32>(count) {
                             table.mark_glyph_coverage_offsets = Some((subdata, array));
                         }
                     }
@@ -122,7 +122,7 @@ impl<'a> Table<'a> {
         &self,
         outer_index: u16,
         inner_index: u16,
-        coordinates: &[NormalizedCoord],
+        coordinates: &[NormalizedCoordinate],
     ) -> Option<f32> {
         self.variation_store
             .and_then(|store| store.parse_delta(outer_index, inner_index, coordinates))

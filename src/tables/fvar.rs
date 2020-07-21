@@ -2,7 +2,7 @@
 
 use core::num::NonZeroU16;
 
-use crate::{Tag, NormalizedCoord};
+use crate::{Tag, NormalizedCoordinate};
 use crate::parser::{Stream, FromData, Fixed, Offset16, Offset, LazyArray16, LazyArrayIter16, f32_bound};
 
 
@@ -22,7 +22,7 @@ pub struct VariationAxis {
 
 impl VariationAxis {
     /// Returns a normalized variation coordinate for this axis.
-    pub(crate) fn normalized_value(&self, mut v: f32) -> NormalizedCoord {
+    pub(crate) fn normalized_value(&self, mut v: f32) -> NormalizedCoordinate {
         // Based on
         // https://docs.microsoft.com/en-us/typography/opentype/spec/avar#overview
 
@@ -35,7 +35,7 @@ impl VariationAxis {
             v = (v - self.def_value) / (self.max_value - self.def_value);
         }
 
-        NormalizedCoord::from(v)
+        NormalizedCoordinate::from(v)
     }
 }
 
@@ -63,7 +63,7 @@ impl<'a> Table<'a> {
         let axis_count = NonZeroU16::new(axis_count)?;
 
         let mut s = Stream::new_at(data, axes_array_offset.to_usize())?;
-        let axes = s.read_array16(axis_count.get())?;
+        let axes = s.read_array16::<VariationAxisRecord>(axis_count.get())?;
 
         Some(Table { axes })
     }
@@ -128,12 +128,12 @@ impl FromData for VariationAxisRecord {
     fn parse(data: &[u8]) -> Option<Self> {
         let mut s = Stream::new(data);
         Some(VariationAxisRecord {
-            axis_tag: s.read()?,
+            axis_tag: s.read::<Tag>()?,
             min_value: s.read::<Fixed>()?.0,
             def_value: s.read::<Fixed>()?.0,
             max_value: s.read::<Fixed>()?.0,
-            flags: s.read()?,
-            axis_name_id: s.read()?,
+            flags: s.read::<u16>()?,
+            axis_name_id: s.read::<u16>()?,
         })
     }
 }

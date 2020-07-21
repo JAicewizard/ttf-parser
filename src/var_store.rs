@@ -2,7 +2,7 @@
 //!
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#item-variation-store
 
-use crate::NormalizedCoord;
+use crate::NormalizedCoordinate;
 use crate::parser::{Stream, FromData, LazyArray16, NumFrom};
 
 
@@ -50,7 +50,7 @@ impl<'a> ItemVariationStore<'a> {
             let total = count.checked_mul(axis_count)?;
             VariationRegionList {
                 axis_count,
-                regions: regions_s.read_array16(total)?,
+                regions: regions_s.read_array16::<RegionAxisCoordinatesRecord>(total)?,
             }
         };
 
@@ -65,21 +65,21 @@ impl<'a> ItemVariationStore<'a> {
         s.skip::<u16>(); // item_count
         s.skip::<u16>(); // short_delta_count
         let count: u16 = s.read()?;
-        s.read_array16(count)
+        s.read_array16::<u16>(count)
     }
 
     pub fn parse_delta(
         &self,
         outer_index: u16,
         inner_index: u16,
-        coordinates: &[NormalizedCoord],
+        coordinates: &[NormalizedCoordinate],
     ) -> Option<f32> {
         let offset = self.data_offsets.get(outer_index)?;
         let mut s = Stream::new_at(self.data, usize::num_from(offset))?;
         let item_count: u16 = s.read()?;
         let short_delta_count: u16 = s.read()?;
         let region_index_count: u16 = s.read()?;
-        let region_indices = s.read_array16(region_index_count)?;
+        let region_indices = s.read_array16::<u16>(region_index_count)?;
 
         if inner_index >= item_count {
             return None;
@@ -118,7 +118,7 @@ impl<'a> VariationRegionList<'a> {
     pub(crate) fn evaluate_region(
         &self,
         index: u16,
-        coordinates: &[NormalizedCoord],
+        coordinates: &[NormalizedCoordinate],
     ) -> f32 {
         let mut v = 1.0;
         for (i, coord) in coordinates.iter().enumerate() {
@@ -185,9 +185,9 @@ impl FromData for RegionAxisCoordinatesRecord {
     fn parse(data: &[u8]) -> Option<Self> {
         let mut s = Stream::new(data);
         Some(RegionAxisCoordinatesRecord {
-            start_coord: s.read()?,
-            peak_coord: s.read()?,
-            end_coord: s.read()?,
+            start_coord: s.read::<i16>()?,
+            peak_coord: s.read::<i16>()?,
+            end_coord: s.read::<i16>()?,
         })
     }
 }

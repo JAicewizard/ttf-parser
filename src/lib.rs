@@ -57,7 +57,7 @@ mod var_store;
 mod writer;
 
 use tables::*;
-use parser::{Stream, FromData, NumFrom, TryNumFrom, LazyArray16, LazyArray32, Offset32, Offset};
+use parser::{Stream, FromData, NumFrom, TryNumFrom, LazyArray16, Offset32, Offset};
 use parser::{i16_bound, f32_bound};
 use head::IndexToLocationFormat;
 pub use fvar::{VariationAxes, VariationAxis};
@@ -101,7 +101,7 @@ impl FromData for Magic {
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
         match u32::parse(data)? {
-            0x00010000 => Some(Magic::TrueType),
+            0x00010000 | 0x74727565 => Some(Magic::TrueType),
             0x4F54544F => Some(Magic::OpenType),
             0x74746366 => Some(Magic::FontCollection),
             _ => None,
@@ -116,30 +116,31 @@ impl FromData for Magic {
 /// Where 0 is a default value.
 ///
 /// The number is stored as f2.16
+#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
-pub struct NormalizedCoord(i16);
+pub struct NormalizedCoordinate(i16);
 
-impl From<i16> for NormalizedCoord {
+impl From<i16> for NormalizedCoordinate {
     /// Creates a new coordinate.
     ///
     /// The provided number will be clamped to the -16384..16384 range.
     #[inline]
     fn from(n: i16) -> Self {
-        NormalizedCoord(i16_bound(-16384, n, 16384))
+        NormalizedCoordinate(i16_bound(-16384, n, 16384))
     }
 }
 
-impl From<f32> for NormalizedCoord {
+impl From<f32> for NormalizedCoordinate {
     /// Creates a new coordinate.
     ///
     /// The provided number will be clamped to the -1.0..1.0 range.
     #[inline]
     fn from(n: f32) -> Self {
-        NormalizedCoord((f32_bound(-1.0, n, 1.0) * 16384.0) as i16)
+        NormalizedCoordinate((f32_bound(-1.0, n, 1.0) * 16384.0) as i16)
     }
 }
 
-impl NormalizedCoord {
+impl NormalizedCoordinate {
     /// Returns the coordinate value as f2.14.
     #[inline]
     pub fn get(self) -> i16 {
@@ -506,10 +507,10 @@ impl FromData for TableRecord {
     fn parse(data: &[u8]) -> Option<Self> {
         let mut s = Stream::new(data);
         Some(TableRecord {
-            table_tag: s.read()?,
-            check_sum: s.read()?,
-            offset: s.read()?,
-            length: s.read()?,
+            table_tag: s.read::<Tag>()?,
+            check_sum: s.read::<u32>()?,
+            offset: s.read::<u32>()?,
+            length: s.read::<u32>()?,
         })
     }
 }
@@ -519,18 +520,18 @@ const MAX_VAR_COORDS: u8 = 32;
 
 #[derive(Clone, Default)]
 struct VarCoords {
-    data: [NormalizedCoord; MAX_VAR_COORDS as usize],
+    data: [NormalizedCoordinate; MAX_VAR_COORDS as usize],
     len: u8,
 }
 
 impl VarCoords {
     #[inline]
-    fn as_slice(&self) -> &[NormalizedCoord] {
+    fn as_slice(&self) -> &[NormalizedCoordinate] {
         &self.data[0..usize::from(self.len)]
     }
 
     #[inline]
-    fn as_mut_slice(&mut self) -> &mut [NormalizedCoord] {
+    fn as_mut_slice(&mut self) -> &mut [NormalizedCoordinate] {
         let end = usize::from(self.len);
         &mut self.data[0..end]
     }
@@ -637,7 +638,7 @@ impl<'a> Face<'a> {
         if magic == Magic::FontCollection {
             s.skip::<u32>(); // version
             let number_of_faces: u32 = s.read().ok_or(FaceParsingError::MalformedFont)?;
-            let offsets: LazyArray32<Offset32> = s.read_array32(number_of_faces)
+            let offsets = s.read_array32::<Offset32>(number_of_faces)
                 .ok_or(FaceParsingError::MalformedFont)?;
 
             let face_offset = offsets.get(index).ok_or(FaceParsingError::FaceIndexOutOfBounds)?;
@@ -1176,12 +1177,20 @@ impl<'a> Face<'a> {
 
     /// Returns glyph's name.
     ///
-    /// Uses the `post` table as a source.
+    /// Uses the `post` and `CFF` tables as sources.
     ///
     /// Returns `None` when no name is associated with a `glyph`.
     #[inline]
     pub fn glyph_name(&self, glyph_id: GlyphId) -> Option<&str> {
-        self.post.and_then(|post| post.glyph_name(glyph_id))
+        if let Some(name) = self.post.and_then(|post| post.glyph_name(glyph_id)) {
+            return Some(name);
+        }
+
+        if let Some(name) = self.cff1.as_ref().and_then(|cff1| cff1::glyph_name(cff1, glyph_id)) {
+            return Some(name);
+        }
+
+        None
     }
 
     /// Checks that face has
@@ -1443,15 +1452,15 @@ impl<'a> Face<'a> {
         Some(())
     }
 
-    /// Returns current normalized variation coordinates.
+    /// Returns the current normalized variation coordinates.
     #[inline]
-    pub fn variation_coordinates(&self) -> &[NormalizedCoord] {
+    pub fn variation_coordinates(&self) -> &[NormalizedCoordinate] {
         self.coordinates.as_slice()
     }
 
-    /// Returns current normalized variation coordinates.
+    /// Checks that face has non-default variation coordinates.
     #[inline]
-    pub fn has_non_default_variation_coords(&self) -> bool {
+    pub fn has_non_default_variation_coordinates(&self) -> bool {
         self.coordinates.as_slice().iter().any(|c| c.0 != 0)
     }
 
@@ -1478,7 +1487,7 @@ impl<'a> Face<'a> {
     }
 
     #[inline]
-    fn coords(&self) -> &[NormalizedCoord] {
+    fn coords(&self) -> &[NormalizedCoordinate] {
         self.coordinates.as_slice()
     }
 }
@@ -1500,7 +1509,7 @@ pub fn fonts_in_collection(data: &[u8]) -> Option<u32> {
     }
 
     s.skip::<u32>(); // version
-    s.read()
+    s.read::<u32>()
 }
 
 

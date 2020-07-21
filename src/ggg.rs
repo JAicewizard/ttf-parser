@@ -4,7 +4,7 @@
 
 use core::convert::TryFrom;
 
-use crate::{GlyphId, Tag, NormalizedCoord};
+use crate::{GlyphId, Tag, NormalizedCoordinate};
 use crate::parser::*;
 
 
@@ -521,7 +521,7 @@ impl<'a> FeatureVariation<'a> {
     /// Evaluates variation using specified `coordinates`.
     ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
-    pub fn evaluate(&self, coordinates: &[NormalizedCoord]) -> bool {
+    pub fn evaluate(&self, coordinates: &[NormalizedCoordinate]) -> bool {
         for condition in try_opt_or!(self.condition_set(), false) {
             if !condition.evaluate(coordinates) {
                 return false;
@@ -598,7 +598,7 @@ struct Condition {
 }
 
 impl Condition {
-    fn evaluate(&self, coordinates: &[NormalizedCoord]) -> bool {
+    fn evaluate(&self, coordinates: &[NormalizedCoordinate]) -> bool {
         let coord = coordinates.get(usize::from(self.axis_index)).cloned().unwrap_or_default();
         self.filter_range_min_value <= coord.get() && coord.get() <= self.filter_range_max_value
     }
@@ -717,9 +717,9 @@ impl FromData for RangeRecord {
     fn parse(data: &[u8]) -> Option<Self> {
         let mut s = Stream::new(data);
         Some(RangeRecord {
-            start_glyph_id: s.read()?,
-            end_glyph_id: s.read()?,
-            value: s.read()?,
+            start_glyph_id: s.read::<GlyphId>()?,
+            end_glyph_id: s.read::<GlyphId>()?,
+            value: s.read::<u16>()?,
         })
     }
 }

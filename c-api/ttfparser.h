@@ -497,11 +497,11 @@ int16_t ttfp_get_glyph_y_origin(const ttfp_face *face, uint16_t glyph_id);
 /**
  * @brief Returns glyph's name.
  *
- * Uses the `post` table as a source.
+ * Uses the `post` and `CFF` tables as sources.
  *
  * A glyph name cannot be larger than 255 bytes + 1 byte for '\0'.
  *
- * @param name A char buffer longer than 256 bytes.
+ * @param name A char buffer larger than 256 bytes.
  * @return `true` on success.
  */
 bool ttfp_get_glyph_name(const ttfp_face *face, uint16_t glyph_id, char *name);
@@ -635,6 +635,18 @@ bool ttfp_get_variation_axis_by_tag(const ttfp_face *face, ttfp_tag tag, ttfp_va
  * @return `false` when face is not variable or doesn't have such axis.
  */
 bool ttfp_set_variation(ttfp_face *face, ttfp_tag axis, float value);
+
+/**
+ * @brief Returns the current normalized variation coordinates.
+ *
+ * Values represented as f2.16
+ */
+const int16_t* ttfp_get_variation_coordinates(const ttfp_face *face);
+
+/**
+ * @brief Checks that face has non-default variation coordinates.
+ */
+bool ttfp_has_non_default_variation_coordinates(const ttfp_face *face);
 
 #ifdef __cplusplus
 } // extern "C"

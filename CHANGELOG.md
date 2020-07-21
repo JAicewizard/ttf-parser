@@ -7,10 +7,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased]
 ### Added
 - `FaceParsingError`
+- `NormalizedCoordinate`
+- `Face::variation_coordinates`
+- `Face::has_non_default_variation_coordinates`
+- Allow `true` magic.
+- `Face::glyph_name` can lookup CFF names too.
 
 ### Changed
 - (CFF,CFF2) 10% faster parsing.
 - `Face::from_slice` returns `Result` now.
+
+### Fixed
+- `Face::width` parsing.
 
 ## [0.7.0] - 2020-07-16
 ### Added
