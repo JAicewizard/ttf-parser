@@ -24,7 +24,7 @@ A high-level, safe, zero-allocation TrueType font parser.
 - Most of numeric casts are checked.
 */
 
-#![doc(html_root_url = "https://docs.rs/ttf-parser/0.7.0")]
+#![doc(html_root_url = "https://docs.rs/ttf-parser/0.8.2")]
 
 #![no_std]
 #![forbid(unsafe_code)]
@@ -67,7 +67,7 @@ pub use gpos::PositioningTable;
 pub use gsub::SubstitutionTable;
 pub use name::*;
 pub use os2::*;
-pub use tables::kern;
+pub use tables::{cmap, kern};
 
 
 /// A type-safe wrapper for glyph ID.
@@ -546,7 +546,7 @@ pub enum FaceParsingError {
     /// Should occur only on malformed fonts.
     MalformedFont,
 
-    /// Face data must start with `0x00010000`, `0x4F54544F` or `0x74746366`.
+    /// Face data must start with `0x00010000`, `0x74727565`, `0x4F54544F` or `0x74746366`.
     UnknownMagic,
 
     /// The face index is larger than the number of faces in the font.
@@ -582,14 +582,14 @@ impl std::error::Error for FaceParsingError {}
 /// A font face handle.
 #[derive(Clone)]
 pub struct Face<'a> {
-    font_data: &'a [u8],
+    font_data: &'a [u8], // The input data. Used by Face::table_data.
     table_records: LazyArray16<'a, TableRecord>,
     avar: Option<avar::Table<'a>>,
     cbdt: Option<&'a [u8]>,
     cblc: Option<&'a [u8]>,
     cff1: Option<cff1::Metadata<'a>>,
     cff2: Option<cff2::Metadata<'a>>,
-    cmap: Option<cmap::Table<'a>>,
+    cmap: Option<cmap::Subtables<'a>>,
     fvar: Option<fvar::Table<'a>>,
     gdef: Option<gdef::Table<'a>>,
     glyf: Option<&'a [u8]>,
@@ -705,7 +705,8 @@ impl<'a> Face<'a> {
         for table in tables {
             let offset = usize::num_from(table.offset);
             let length = usize::num_from(table.length);
-            let range = offset..(offset + length);
+            let end = offset.checked_add(length).ok_or(FaceParsingError::MalformedFont)?;
+            let range = offset..end;
 
             match &table.table_tag.to_bytes() {
                 b"CBDT" => face.cbdt = data.get(range),
@@ -722,7 +723,7 @@ impl<'a> Face<'a> {
                 b"VORG" => face.vorg = data.get(range).and_then(|data| vorg::Table::parse(data)),
                 b"VVAR" => face.vvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
                 b"avar" => face.avar = data.get(range).and_then(|data| avar::Table::parse(data)),
-                b"cmap" => face.cmap = data.get(range).and_then(|data| cmap::Table::parse(data)),
+                b"cmap" => face.cmap = data.get(range).and_then(|data| cmap::parse(data)),
                 b"fvar" => face.fvar = data.get(range).and_then(|data| fvar::Table::parse(data)),
                 b"glyf" => face.glyf = data.get(range),
                 b"gvar" => face.gvar = data.get(range).and_then(|data| gvar::Table::parse(data)),
@@ -817,13 +818,15 @@ impl<'a> Face<'a> {
         }
     }
 
-    /// Returns a raw data of a selected table.
+    /// Returns the raw data of a selected table.
+    ///
+    /// Useful if you want to parse the data manually.
     pub fn table_data(&self, tag: Tag) -> Option<&'a [u8]> {
         let (_, table) = self.table_records.binary_search_by(|record| record.table_tag.cmp(&tag))?;
         let offset = usize::num_from(table.offset);
         let length = usize::num_from(table.length);
-        let range = offset..(offset + length);
-        self.font_data.get(range)
+        let end = offset.checked_add(length)?;
+        self.font_data.get(offset..end)
     }
 
     /// Returns an iterator over [Name Records].
@@ -868,6 +871,14 @@ impl<'a> Face<'a> {
         try_opt_or!(self.os_2, false).is_oblique()
     }
 
+    /// Checks that face is marked as *Monospaced*.
+    ///
+    /// Returns `false` when `post` table is not present.
+    #[inline]
+    pub fn is_monospaced(&self) -> bool {
+        try_opt_or!(self.post, false).is_monospaced()
+    }
+
     /// Checks that face is variable.
     ///
     /// Simply checks the presence of a `fvar` table.
@@ -891,6 +902,14 @@ impl<'a> Face<'a> {
     #[inline]
     pub fn width(&self) -> Width {
         try_opt_or!(self.os_2, Width::default()).width()
+    }
+
+    /// Returns face's italic angle.
+    ///
+    /// Returns `None` when `post` table is not present.
+    #[inline]
+    pub fn italic_angle(&self) -> Option<f32> {
+        self.post.map(|table| table.italic_angle())
     }
 
     #[inline]
@@ -943,6 +962,54 @@ impl<'a> Face<'a> {
         } else {
             hhea::line_gap(self.hhea)
         }
+    }
+
+    /// Returns a horizontal typographic face ascender.
+    ///
+    /// Prefer `Face::ascender` unless you explicitly want this. This is a more
+    /// low-level alternative.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `None` when OS/2 table is not present.
+    #[inline]
+    pub fn typographic_ascender(&self) -> Option<i16> {
+        self.os_2.map(|table| {
+            let v = table.typo_ascender();
+            self.apply_metrics_variation(Tag::from_bytes(b"hasc"), v)
+        })
+    }
+
+    /// Returns a horizontal typographic face descender.
+    ///
+    /// Prefer `Face::descender` unless you explicitly want this. This is a more
+    /// low-level alternative.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `None` when OS/2 table is not present.
+    #[inline]
+    pub fn typographic_descender(&self) -> Option<i16> {
+        self.os_2.map(|table| {
+            let v = table.typo_descender();
+            self.apply_metrics_variation(Tag::from_bytes(b"hdsc"), v)
+        })
+    }
+
+    /// Returns a horizontal typographic face line gap.
+    ///
+    /// Prefer `Face::line_gap` unless you explicitly want this. This is a more
+    /// low-level alternative.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `None` when OS/2 table is not present.
+    #[inline]
+    pub fn typographic_line_gap(&self) -> Option<i16> {
+        self.os_2.map(|table| {
+            let v = table.typo_line_gap();
+            self.apply_metrics_variation(Tag::from_bytes(b"hlgp"), v)
+        })
     }
 
     // TODO: does this affected by USE_TYPO_METRICS?
@@ -999,6 +1066,17 @@ impl<'a> Face<'a> {
     pub fn x_height(&self) -> Option<i16> {
         self.os_2.and_then(|os_2| os_2.x_height())
             .map(|v| self.apply_metrics_variation(Tag::from_bytes(b"xhgt"), v))
+    }
+
+    /// Returns face's capital height.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `None` when OS/2 table is not present or when its version is < 2.
+    #[inline]
+    pub fn capital_height(&self) -> Option<i16> {
+        self.os_2.and_then(|os_2| os_2.cap_height())
+            .map(|v| self.apply_metrics_variation(Tag::from_bytes(b"cpht"), v))
     }
 
     /// Returns face's underline metrics.
@@ -1075,14 +1153,37 @@ impl<'a> Face<'a> {
         self.number_of_glyphs.get()
     }
 
+    /// Returns an iterator over
+    /// [character to glyph index mapping](https://docs.microsoft.com/en-us/typography/opentype/spec/cmap).
+    ///
+    /// This is a more low-level alternative to `Face::glyph_index`.
+    ///
+    /// An iterator can be empty.
+    #[inline]
+    pub fn character_mapping_subtables(&self) -> cmap::Subtables {
+        self.cmap.unwrap_or_default()
+    }
+
     /// Resolves a Glyph ID for a code point.
     ///
     /// Returns `None` instead of `0` when glyph is not found.
     ///
     /// All subtable formats except Mixed Coverage (8) are supported.
+    ///
+    /// If you need a more low-level control, prefer `Face::character_mapping_subtables`.
     #[inline]
     pub fn glyph_index(&self, c: char) -> Option<GlyphId> {
-        cmap::glyph_index(self.cmap.as_ref()?, c)
+        for encoding in self.character_mapping_subtables() {
+            if !encoding.is_unicode() {
+                continue;
+            }
+
+            if let Some(id) = encoding.glyph_index(u32::from(c)) {
+                return Some(id);
+            }
+        }
+
+        None
     }
 
     /// Resolves a variation of a Glyph ID from two code points.
@@ -1094,7 +1195,14 @@ impl<'a> Face<'a> {
     /// Returns `None` instead of `0` when glyph is not found.
     #[inline]
     pub fn glyph_variation_index(&self, c: char, variation: char) -> Option<GlyphId> {
-        cmap::glyph_variation_index(self.cmap.as_ref()?, c, variation)
+        let res = self.character_mapping_subtables()
+            .find(|e| e.format() == cmap::Format::UnicodeVariationSequences)
+            .and_then(|e| e.glyph_variation_index(c, variation))?;
+
+        match res {
+            cmap::GlyphVariationResult::Found(v) => Some(v),
+            cmap::GlyphVariationResult::UseDefault => self.glyph_index(c),
+        }
     }
 
     /// Returns glyph's horizontal advance.

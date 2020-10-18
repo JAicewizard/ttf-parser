@@ -5,20 +5,45 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [0.8.2] - 2020-07-31
 ### Added
+- `cmap::Subtable::codepoints`
+
+### Fixed
+- (cmap) Incorrectly returning glyph ID `0` instead of `None` for format 0
+- (cmap) Possible invalid glyph mapping for format 2
+
+## [0.8.1] - 2020-07-29
+### Added
+- `Face::is_monospaced`
+- `Face::italic_angle`
+- `Face::typographic_ascender`
+- `Face::typographic_descender`
+- `Face::typographic_line_gap`
+- `Face::capital_height`
+
+## [0.8.0] - 2020-07-21
+### Added
+- Allow `true` magic.
 - `FaceParsingError`
 - `NormalizedCoordinate`
 - `Face::variation_coordinates`
 - `Face::has_non_default_variation_coordinates`
-- Allow `true` magic.
 - `Face::glyph_name` can lookup CFF names too.
+- `Face::table_data`
+- `Face::character_mapping_subtables`
 
 ### Changed
 - (CFF,CFF2) 10% faster parsing.
 - `Face::from_slice` returns `Result` now.
+- `Name::platform_id` returns `PlatformId` instead of `Option<PlatformId>` now.
+- The `cmap` module became public.
 
 ### Fixed
 - `Face::width` parsing.
+- Possible u32 overflow on 32-bit platforms during `Face::from_slice`.
+- (cmap) `Face::glyph_variation_index` processing when the encoding table has only one glyph.
 
 ## [0.7.0] - 2020-07-16
 ### Added
@@ -161,7 +186,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Removed
 - `GDEF` table parsing.
 
-[Unreleased]: https://github.com/RazrFalcon/ttf-parser/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/RazrFalcon/ttf-parser/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/RazrFalcon/ttf-parser/compare/v0.8.1...v0.8.2
+[0.8.1]: https://github.com/RazrFalcon/ttf-parser/compare/v0.8.0...v0.8.1
+[0.8.0]: https://github.com/RazrFalcon/ttf-parser/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/RazrFalcon/ttf-parser/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/RazrFalcon/ttf-parser/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/RazrFalcon/ttf-parser/compare/v0.6.0...v0.6.1

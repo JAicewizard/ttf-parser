@@ -50,7 +50,7 @@ There are roughly three types of TrueType tables:
 | Thread safe       | ✓                      |                     | ~ (mostly reentrant)           |
 | Zero allocation   | ✓                      |                     |                                |
 | Variable fonts    | ✓                      | ✓                   |                                |
-| Rendering         |                        | ✓                   | ~ (very primitive)             |
+| Rendering         | -<sup>1</sup>          | ✓                   | ~ (very primitive)             |
 | `avar` table      | ✓                      | ✓                   |                                |
 | `bdat` table      |                        | ✓                   |                                |
 | `bloc` table      |                        | ✓                   |                                |
@@ -58,13 +58,13 @@ There are roughly three types of TrueType tables:
 | `CBLC` table      | ✓                      | ✓                   |                                |
 | `CFF `&nbsp;table | ✓                      | ✓                   | ~ (no `seac` support)          |
 | `CFF2` table      | ✓                      | ✓                   |                                |
-| `cmap` table      | ~ (no 8; Unicode-only) | ✓                   | ~ (no 2,8,10,14; Unicode-only) |
+| `cmap` table      | ~ (no 8)               | ✓                   | ~ (no 2,8,10,14; Unicode-only) |
 | `EBDT` table      |                        | ✓                   |                                |
 | `EBLC` table      |                        | ✓                   |                                |
 | `fvar` table      | ✓                      | ✓                   |                                |
 | `gasp` table      |                        | ✓                   |                                |
 | `GDEF` table      | ~                      |                     |                                |
-| `glyf` table      | ~<sup>1</sup>          | ✓                   | ~<sup>1</sup>                  |
+| `glyf` table      | ~<sup>2</sup>          | ✓                   | ~<sup>2</sup>                  |
 | `GPOS` table      |                        |                     | ~ (only 2)                     |
 | `GSUB` table      |                        |                     |                                |
 | `gvar` table      | ✓                      | ✓                   |                                |
@@ -85,8 +85,8 @@ There are roughly three types of TrueType tables:
 | `VORG` table      | ✓                      | ✓                   |                                |
 | `VVAR` table      | ✓                      | ✓                   |                                |
 | Language          | Rust + C API           | C                   | C                              |
-| Dynamic lib size  | <300KiB<sup>2</sup>    | ~760KiB<sup>3</sup> | ? (header-only)                |
-| Tested version    | 0.7.0                  | 2.9.1               | 1.24                           |
+| Dynamic lib size  | <300KiB<sup>3</sup>    | ~760KiB<sup>4</sup> | ? (header-only)                |
+| Tested version    | 0.8.0                  | 2.9.1               | 1.24                           |
 | License           | MIT / Apache-2.0       | FTL / GPLv2         | public domain                  |
 
 Legend:
@@ -97,11 +97,16 @@ Legend:
 
 Notes:
 
-1. Matching points are not supported.
-2. When using from Rust, the library binary overhead depends on used methods
+1. While `ttf-parser` doesn't support rendering by itself,
+   there are mutliple rendering libraries on top of it:
+   [rusttype](https://gitlab.redox-os.org/redox-os/rusttype),
+   [ab-glyph](https://github.com/alexheretic/ab-glyph)
+   and [fontdue](https://github.com/mooman219/fontdue).
+2. Matching points are not supported.
+3. When using from Rust, the library binary overhead depends on used methods
    and can vary from 10KiB up to 100KiB.<br/>
    When using from C, we have to include the Rust's std too, which blows up the size.
-3. Depends on build flags.
+4. Depends on build flags.
 
 ### Performance
 
@@ -126,18 +131,21 @@ The [benchmark](./benches/outline/) tests how long it takes to outline all glyph
 And here are some methods benchmarks:
 
 ```text
-test outline_glyph_276_from_cff  ... bench:         858 ns/iter (+/- 40)
-test outline_glyph_276_from_cff2 ... bench:         793 ns/iter (+/- 30)
-test from_data_otf_cff           ... bench:         746 ns/iter (+/- 10)
-test from_data_otf_cff2          ... bench:         709 ns/iter (+/- 75)
-test outline_glyph_276_from_glyf ... bench:         606 ns/iter (+/- 10)
-test outline_glyph_8_from_cff2   ... bench:         470 ns/iter (+/- 11)
-test from_data_ttf               ... bench:         351 ns/iter (+/- 5)
-test glyph_name_276              ... bench:         299 ns/iter (+/- 4)
-test outline_glyph_8_from_cff    ... bench:         299 ns/iter (+/- 7)
-test outline_glyph_8_from_glyf   ... bench:         266 ns/iter (+/- 4)
-test family_name                 ... bench:         198 ns/iter (+/- 3)
-test glyph_index_u41             ... bench:          13 ns/iter (+/- 0)
+test outline_glyph_276_from_cff2 ... bench:         778 ns/iter (+/- 15)
+test from_data_otf_cff           ... bench:         760 ns/iter (+/- 13)
+test from_data_otf_cff2          ... bench:         709 ns/iter (+/- 25)
+test outline_glyph_276_from_cff  ... bench:         678 ns/iter (+/- 41)
+test outline_glyph_276_from_glyf ... bench:         649 ns/iter (+/- 11)
+test outline_glyph_8_from_cff2   ... bench:         476 ns/iter (+/- 14)
+test from_data_ttf               ... bench:         352 ns/iter (+/- 11)
+test glyph_name_post_276         ... bench:         223 ns/iter (+/- 5)
+test outline_glyph_8_from_cff    ... bench:         261 ns/iter (+/- 13)
+test outline_glyph_8_from_glyf   ... bench:         281 ns/iter (+/- 5)
+test family_name                 ... bench:         183 ns/iter (+/- 102)
+test glyph_name_cff_276          ... bench:         109 ns/iter (+/- 1)
+test glyph_index_u41             ... bench:          16 ns/iter (+/- 0)
+test glyph_name_cff_8            ... bench:           7 ns/iter (+/- 0)
+test glyph_name_post_8           ... bench:           2 ns/iter (+/- 0)
 test subscript_metrics           ... bench:           2 ns/iter (+/- 0)
 test glyph_hor_advance           ... bench:           2 ns/iter (+/- 0)
 test glyph_hor_side_bearing      ... bench:           2 ns/iter (+/- 0)
@@ -149,12 +157,6 @@ test x_height                    ... bench:           1 ns/iter (+/- 0)
 test units_per_em                ... bench:         0.5 ns/iter (+/- 0)
 test width                       ... bench:         0.2 ns/iter (+/- 0)
 ```
-
-`family_name` is expensive, because it allocates a `String` and the original data
-is stored as UTF-16 BE.
-
-`glyph_name_8` is faster than `glyph_name_276`, because for glyph indexes lower than 258
-we are using predefined names, so no parsing is involved.
 
 ### License
 
